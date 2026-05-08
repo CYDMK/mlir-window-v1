@@ -1,8 +1,8 @@
 # TPU-MLIR Auto Converter Developer Guide
 
-เครื่องมือนี้ใช้สำหรับแปลงโมเดลจาก ONNX / YOLO `.pt` ไปเป็น `.bmodel` สำหรับใช้งานบน Sophgo TPU ผ่าน TPU-MLIR
+This tool is designed to automatically convert ONNX / YOLO `.pt` models into `.bmodel` format for Sophgo TPU devices using TPU-MLIR.
 
-รองรับ:
+Supported models:
 
 * PaddleOCR DET
 * PaddleOCR REC
@@ -13,9 +13,9 @@
 
 # 1. Pipeline Overview
 
-## PaddleOCR
+## PaddleOCR Pipeline
 
-```text
+```text id="bhm3xv"
 PaddleOCR ONNX
 ↓
 Read YAML Config
@@ -29,9 +29,9 @@ model_deploy
 BMODEL
 ```
 
-## YOLO
+## YOLO Pipeline
 
-```text
+```text id="azc6mi"
 YOLO .pt
 ↓
 Ultralytics export ONNX
@@ -51,13 +51,13 @@ BMODEL
 
 # 2. Main Features
 
-* Auto export YOLO `.pt` เป็น `.onnx`
+* Auto export YOLO `.pt` to `.onnx`
 * Auto convert ONNX → MLIR → BMODEL
 * Auto start Docker Desktop
 * Auto create Docker container
 * Auto use `/workspace`
 * Auto copy `.bmodel` from Docker to host
-* Auto open result folder after finished
+* Auto open result folder after conversion
 * Save logs inside each run folder
 * Generate `commands.bat` / `commands.txt`
 * YOLO OBB output transpose:
@@ -69,7 +69,7 @@ BMODEL
 
 # 3. Project Structure
 
-```text
+```text id="s7cny4"
 model_conversion/
 ├── checkandauto_auto_open_folder.py
 ├── open_gui.bat
@@ -93,31 +93,33 @@ model_conversion/
 
 ## Python
 
-แนะนำ Python 3.9 - 3.11
+Recommended:
+
+* Python 3.9 - 3.11
 
 ## Python Packages
 
-```bash
+```bash id="7wmwwd"
 pip install ultralytics onnx pyyaml numpy opencv-python protobuf ml_dtypes typing_extensions
 ```
 
 ## Docker
 
-ต้องติดตั้ง Docker Desktop และใช้ image:
+Install Docker Desktop and pull:
 
-```bash
+```bash id="7m5b4g"
 docker pull sophgo/tpuc_dev:latest
 ```
 
-Container name ที่ script ใช้:
+Container name used by the script:
 
-```text
+```text id="n3jxdn"
 model_conversion
 ```
 
 Docker workdir:
 
-```text
+```text id="w9e0v2"
 /workspace
 ```
 
@@ -125,7 +127,7 @@ Docker workdir:
 
 # 5. Main Constants
 
-```python
+```python id="k8c1l7"
 QUANTIZE_OPTIONS = ["F32", "F16", "BF16", "INT8", "INT4"]
 QUANTIZE_NEEDS_CALIB = {"INT8", "INT4"}
 
@@ -143,7 +145,7 @@ DOCKER_WORKDIR = "/workspace"
 
 # 6. Important Data Class
 
-```python
+```python id="24l8o6"
 @dataclasses.dataclass
 class ModelConfig:
     model_type: str
@@ -161,20 +163,20 @@ class ModelConfig:
     yolo_pt_path: Optional[Path] = None
 ```
 
-ใช้เก็บค่าทั้งหมดของโมเดลก่อนส่งเข้า `_run_pipeline()`
+Used to store all model settings before sending into `_run_pipeline()`.
 
 ---
 
 # 7. Supported Model Types
 
-```python
+```python id="p0gxlt"
 def is_yolo_model(model_type: str) -> bool:
     return model_type in {"yolo_hbb", "yolo_obb"}
 ```
 
-Model type ที่ใช้ใน GUI / terminal:
+Supported GUI / terminal model types:
 
-```text
+```text id="3sjcru"
 det
 rec
 yolo_hbb
@@ -186,23 +188,23 @@ both
 
 # 8. YOLO Export Logic
 
-ฟังก์ชันหลัก:
+Main function:
 
-```python
+```python id="jlwmkv"
 export_yolo_pt_to_onnx()
 ```
 
-หน้าที่:
+Responsibilities:
 
-1. รับ `.pt`
-2. ใช้ `ultralytics.YOLO`
-3. export เป็น `.onnx`
-4. copy ONNX ไปไว้ใน run folder
-5. ถ้าเป็น YOLO OBB จะเพิ่ม Transpose node
+1. Load `.pt`
+2. Use `ultralytics.YOLO`
+3. Export `.onnx`
+4. Copy ONNX into run folder
+5. Add transpose node for YOLO OBB
 
-คำสั่ง export ภายใน:
+Internal export command:
 
-```python
+```python id="z3fyiv"
 model.export(
     format="onnx",
     imgsz=640,
@@ -216,17 +218,17 @@ model.export(
 
 # 9. YOLO OBB Transpose Logic
 
-เฉพาะ `yolo_obb` จะทำ:
+Only `yolo_obb` models perform transpose:
 
-```text
+```text id="u5h09e"
 1 x 6 x 8400
 ↓
 1 x 8400 x 6
 ```
 
-ผ่าน ONNX node:
+Using ONNX node:
 
-```python
+```python id="86xekd"
 Transpose(
     perm=[0, 2, 1]
 )
@@ -234,44 +236,44 @@ Transpose(
 
 Node name:
 
-```text
+```text id="vql6wq"
 Transpose_YOLO_OBB_Output
 ```
 
-Output ใหม่:
+New output:
 
-```text
+```text id="u5v4zv"
 output_transpose
 ```
 
-HBB จะไม่ transpose
+YOLO HBB models are not modified.
 
 ---
 
 # 10. Docker Logic
 
-## Check Docker
+## Docker Check
 
-```python
+```python id="gntdgu"
 ensure_docker_ready()
 ```
 
-ทำหน้าที่:
+Responsibilities:
 
-* ตรวจว่า `docker` command มีไหม
-* ตรวจว่า Docker daemon running ไหม
-* ถ้า Windows แล้ว Docker ยังไม่เปิด จะเปิด Docker Desktop ให้เอง
-* รอ Docker start ตาม timeout
+* Check if `docker` command exists
+* Check if Docker daemon is running
+* Auto start Docker Desktop on Windows
+* Wait for Docker startup
 
-## Create Container
+## Auto Create Container
 
-```python
+```python id="9b2n9m"
 ensure_tpumlir_container()
 ```
 
-ถ้าไม่มี container จะสร้าง:
+If container does not exist:
 
-```bash
+```bash id="rvk6yb"
 docker run -dit --privileged ^
   --name model_conversion ^
   -v <project_folder>:/workspace ^
@@ -283,31 +285,31 @@ docker run -dit --privileged ^
 
 # 11. Host to Container Path Mapping
 
-ฟังก์ชัน:
+Function:
 
-```python
+```python id="c2tnf1"
 host_to_container_path()
 ```
 
-ใช้แปลง path จาก Windows เช่น:
+Converts Windows host paths:
 
-```text
+```text id="fh7h71"
 D:\BUU\model_conversion\results\xxx\best.onnx
 ```
 
-เป็น path ใน Docker:
+Into Docker paths:
 
-```text
+```text id="0qh40z"
 /workspace/results/xxx/best.onnx
 ```
 
-ถ้า map ไม่ได้ script จะใช้:
+If mapping fails:
 
-```python
+```python id="0a84m8"
 DOCKER_WORKDIR = "/workspace"
 ```
 
-อัตโนมัติ
+is used automatically.
 
 ---
 
@@ -315,15 +317,15 @@ DOCKER_WORKDIR = "/workspace"
 
 ## model_transform
 
-สร้างโดย:
+Generated by:
 
-```python
+```python id="j4s7uk"
 _transform_argv()
 ```
 
-ตัวอย่าง:
+Example:
 
-```bash
+```bash id="9shw2g"
 model_transform \
   --model_name yolo_obb \
   --model_def /workspace/results/xxx/best.onnx \
@@ -336,15 +338,15 @@ model_transform \
 
 ## model_deploy
 
-สร้างโดย:
+Generated by:
 
-```python
+```python id="mqlz76"
 _deploy_argv()
 ```
 
-ตัวอย่าง:
+Example:
 
-```bash
+```bash id="h6ph2f"
 model_deploy \
   --mlir best.mlir \
   --quantize F16 \
@@ -358,31 +360,37 @@ model_deploy \
 
 ## F16 / F32 / BF16
 
-ไม่ต้องใช้ calibration
+No calibration required.
 
 ## INT8 / INT4
 
-ต้องใช้ calibration table หรือ dataset
+Requires:
 
-ถ้าเลือก `run calibration` จะเรียก:
+* calibration table
+  or
+* calibration dataset
 
-```bash
+When enabled:
+
+```bash id="wjh1y5"
 run_calibration
 ```
+
+will be executed automatically.
 
 ---
 
 # 14. Logs
 
-Logs จะถูกเก็บใน run folder:
+Logs are stored inside each run folder:
 
-```text
+```text id="62gp7m"
 results/<run_id>_<model_type>/logs/
 ```
 
-ตัวอย่าง:
+Example:
 
-```text
+```text id="53bq4k"
 logs/
 ├── pt_to_onnx.log
 ├── transform.log
@@ -395,9 +403,9 @@ logs/
 
 # 15. Timing Report
 
-หลังจบ script จะสร้าง timing log:
+After conversion:
 
-```text
+```text id="6o4qgg"
 === Timing Report ===
 Step              Duration
 model_transform   00:00:15
@@ -409,9 +417,9 @@ TOTAL             00:00:55
 
 # 16. Output Files
 
-หลัง convert สำเร็จจะได้:
+Generated output:
 
-```text
+```text id="7h7nva"
 best.onnx
 best.mlir
 best_bm1684x_f16.bmodel
@@ -419,22 +427,22 @@ commands.bat
 logs/
 ```
 
-และ script จะเปิด result folder ให้อัตโนมัติ
+The script also automatically opens the result folder after completion.
 
 ---
 
 # 17. GUI Flow
 
-GUI ใช้ `tkinter`
+GUI uses `tkinter`.
 
-Class หลัก:
+Main classes:
 
-```python
+```python id="10x0bp"
 TkConfigApp
 _ModelPanel
 ```
 
-แต่ละ panel ใช้เก็บ:
+Each panel stores:
 
 * model path
 * input shape
@@ -448,23 +456,29 @@ _ModelPanel
 
 # 18. Developer Notes
 
-## จุดที่ควรแก้ถ้าจะเพิ่ม model type ใหม่
+## Adding New Model Types
 
-1. เพิ่ม model type ใน GUI:
+### Step 1
 
-```python
+Add model type to GUI:
+
+```python id="n0c6ut"
 ("new_model", "New Model")
 ```
 
-2. เพิ่ม preprocess function
+### Step 2
 
-```python
+Add preprocess function:
+
+```python id="ebmqx2"
 get_new_model_preprocess()
 ```
 
-3. เพิ่ม logic ใน `_run_pipeline()`
+### Step 3
 
-```python
+Add logic inside `_run_pipeline()`:
+
+```python id="e8h7l5"
 if model_type == "new_model":
     ...
 ```
@@ -473,57 +487,57 @@ if model_type == "new_model":
 
 # 19. Common Errors
 
-## Docker not running
+## Docker Not Running
 
-แก้โดยเปิด Docker Desktop หรือให้ script เปิดให้เอง
+Start Docker Desktop or let the script auto start it.
 
-## model_transform not found
+## model_transform Not Found
 
-แปลว่า container ไม่ใช่ TPU-MLIR image ที่ถูกต้อง
+Usually means incorrect Docker image.
 
-แก้:
+Fix:
 
-```bash
+```bash id="hlwwp5"
 docker rm -f model_conversion
 docker pull sophgo/tpuc_dev:latest
 ```
 
-## ONNX output shape ไม่ตรง
+## Incorrect ONNX Output Shape
 
-สำหรับ YOLO OBB ให้เช็คใน Netron ว่า output เป็น:
+For YOLO OBB check in Netron:
 
-```text
+```text id="a9ikn0"
 output_transpose
 1 x 8400 x 6
 ```
 
-## INT8 deploy fail
+## INT8 Deploy Failure
 
-มักเกิดจากไม่มี calibration table
+Usually caused by missing calibration table.
 
 ---
 
-# 20. Recommended Dev Improvements
+# 20. Recommended Improvements
 
-* Add model info export เป็น `model_info.txt`
-* Add bmodel verification ด้วย `model_tool --info`
-* Add checkbox สำหรับ dynamic ONNX export
-* Add option save transposed ONNX เป็นไฟล์ใหม่
-* Add progress bar ใน GUI
-* Add auto install missing packages
+* Export `model_info.txt`
+* Add `model_tool --info` verification
+* Add dynamic ONNX export option
+* Save transposed ONNX as separate file
+* Add GUI progress bar
+* Auto install missing packages
 
 ---
 
 # 21. Run Command
 
-```bash
-python checkandauto.py
+```bash id="8kswt8"
+python checkandauto_auto_open_folder.py
 ```
 
-หรือผ่าน `.bat`:
+Or via `.bat`:
 
-```bat
-set SCRIPT=checkandauto.py
+```bat id="jkhsv8"
+set SCRIPT=checkandauto_auto_open_folder.py
 python "%SCRIPT%"
 ```
 
@@ -531,9 +545,9 @@ python "%SCRIPT%"
 
 # 22. Summary
 
-เครื่องมือนี้ช่วยให้ Dev แปลงโมเดลเป็น `.bmodel` ได้ครบในขั้นตอนเดียว:
+This tool provides a complete one-click conversion pipeline:
 
-```text
+```text id="6f8ydu"
 Select model
 ↓
 Export ONNX if needed
