@@ -290,6 +290,64 @@ def is_pt_file(path: Path) -> bool:
 def is_onnx_file(path: Path) -> bool:
     return path.suffix.lower() == ".onnx"
 
+def add_yolo_obb_transpose(onnx_path: Path):
+    """
+    Add transpose node for YOLO OBB output:
+        1 x 6 x 8400
+        ->
+        1 x 8400 x 6
+
+    This function is used for both:
+    - YOLO .pt exported to ONNX
+    - YOLO .onnx selected directly
+    """
+
+    onnx_path = onnx_path.resolve()
+
+    print("\n  Adding output transpose for YOLO OBB...")
+    print(f"  ONNX: {onnx_path}")
+    print("  Target shape: 1 x 8400 x 6")
+
+    model = onnx.load(str(onnx_path))
+
+    if not model.graph.output:
+        raise RuntimeError("ONNX model has no graph output to transpose.")
+
+    # Prevent duplicate transpose if this ONNX has already been patched.
+    for node in model.graph.node:
+        if node.name == "Transpose_YOLO_OBB_Output":
+            print("  [SKIP] Transpose already exists")
+            return
+
+    old_output_name = model.graph.output[0].name
+    new_output_name = "output_transpose"
+
+    transpose_node = helper.make_node(
+        "Transpose",
+        inputs=[old_output_name],
+        outputs=[new_output_name],
+        perm=[0, 2, 1],
+        name="Transpose_YOLO_OBB_Output",
+    )
+
+    model.graph.node.append(transpose_node)
+    model.graph.output[0].name = new_output_name
+
+    # Update static output shape for easier inspection in Netron.
+    out_shape = model.graph.output[0].type.tensor_type.shape
+    del out_shape.dim[:]
+
+    for dim_value in [1, 8400, 6]:
+        dim = out_shape.dim.add()
+        dim.dim_value = dim_value
+
+    onnx.save(model, str(onnx_path))
+
+    print("  [OK] YOLO OBB output transposed")
+    print("  Output should be:")
+    print("      output_transpose : 1 x 8400 x 6")
+
+
 def export_yolo_pt_to_onnx(
     pt_path: Path,
     imgsz: int,
@@ -371,47 +429,10 @@ def export_yolo_pt_to_onnx(
 
     print(f"  [OK] Saved ONNX copy: {saved_onnx}")
 
-    # Add transpose only for YOLO OBB
-    is_obb = (
-        model_type == "yolo_obb"
-        or "yolo_obb" in str(out_dir).lower()
-        or "obb" in pt_path.stem.lower()
-    )
-
-    if is_obb:
-        print("\n  Adding output transpose for YOLO OBB...")
-        print("  Target shape: 1 x 8400 x 6")
-
-        model = onnx.load(str(saved_onnx))
-
-        if not model.graph.output:
-            raise RuntimeError("ONNX model has no graph output to transpose.")
-
-        old_output_name = model.graph.output[0].name
-        new_output_name = "output_transpose"
-
-        transpose_node = helper.make_node(
-            "Transpose",
-            inputs=[old_output_name],
-            outputs=[new_output_name],
-            perm=[0, 2, 1],
-            name="Transpose_YOLO_OBB_Output",
-        )
-
-        model.graph.node.append(transpose_node)
-        model.graph.output[0].name = new_output_name
-
-        out_shape = model.graph.output[0].type.tensor_type.shape
-        del out_shape.dim[:]
-        for dim_value in [1, 8400, 6]:
-            dim = out_shape.dim.add()
-            dim.dim_value = dim_value
-
-        onnx.save(model, str(saved_onnx))
-
-        print("  [OK] YOLO OBB output transposed")
-        print("  Output should be:")
-        print("      output_transpose : 1 x 8400 x 6")
+    # Add transpose only for YOLO OBB.
+    # This covers YOLO .pt because this function is used after exporting .pt -> .onnx.
+    if model_type == "yolo_obb":
+        add_yolo_obb_transpose(saved_onnx)
     else:
         print("\n  [SKIP] Output transpose skipped")
         print("  Reason: model is not YOLO OBB")
@@ -1323,6 +1344,12 @@ def _run_pipeline(cfg: ModelConfig, run_id: str) -> None:
             return
 
     if is_yolo_model(model_type):
+        # If user selected YOLO .onnx directly, still patch OBB output here.
+        # If user selected YOLO .pt, the exported ONNX may already be patched,
+        # and add_yolo_obb_transpose() will safely skip duplicate transpose.
+        if model_type == "yolo_obb":
+            add_yolo_obb_transpose(onnx_path)
+
         print(f"\n  Loading YOLO ONNX : {onnx_path}")
         onnx_info = get_onnx_info(str(onnx_path))
         preprocess = get_yolo_preprocess()
